@@ -25,7 +25,8 @@ struct file_info { // Holds the file information.
     char filename[10]; // Name of the file.
     int fd; // file descriptor.  
 	int startblock;
-    int offset;
+    int r_offset;
+    int w_offset;
 }; // End of struct file_info.
 
 struct f_node{
@@ -50,7 +51,7 @@ int init_disk() {
 // Checks if a file exists.  Return -1 on false, file disciptor on true.
 int file_exists(char *username, char *filename) {
     int fd, exists;
-    int fd_file;
+    int fd_file=-1;  //file does not exit
     file_info fi;
     fd = open("files.dat", O_RDONLY);
     for (exists = 0; read(fd, &fi, sizeof(fi)) > 0;) {
@@ -60,7 +61,6 @@ int file_exists(char *username, char *filename) {
             break;
         }
     }
-    fd_file=-1;   //the file does not exist
     close(fd);
     return fd_file;
 }
@@ -127,13 +127,17 @@ int assign_fd(){
     file_info block;
     // search for an empty block
     fd = open("files.dat", O_RDWR);
-    for (found = 0; read(fd, &block, sizeof(block)) > 0;) {
-        if (block.username[0] == 0) {
+    for (; read(fd, &block, sizeof(block)) > 0;) {
+	printf("in the assign_fd loop");
+        if (block.username[0] == 0) {    
             last_fd++;   //the first file has the fd=0, the last_fd will be incresed by 1 for the new file
-            break;
-        }else
+            //printf("found an empty block %d\n", last_fd);   //debug
+	    break;
+        }else{
         last_fd=block.fd; // record the fd of the previous file
-    }
+	//printf("found one block not empty, %s:%s:%d\n", block.username, block.filename,block.fd);	//debug
+	}    
+}
     // insert file 
     close(fd);
     // return success
@@ -156,10 +160,11 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
     char message[512];
     printf("open_file_1_svc: (user_name = '%s', file_name = '%s')\n", argp->user_name, argp->file_name);
     init_disk();
-    file_exists(argp->user_name, argp->file_name);
-    printf("%s","file exists \n"); 
+    fd_file=file_exists(argp->user_name, argp->file_name);
+    //printf("fd_file:%d\n",fd_file);    //debug
     if (fd_file==-1) {   //if the file not exists
-        fd_file=assign_fd();  
+        fd_file=assign_fd(); 
+ 	//printf("Assinged file id: %d\n", fd_file);  //debug
         if(fd_file==MAX_FILES){  //fd_file starts from 0, if fd_file =20, it exceeds the maximum file number
             snprintf(message, 512, "In server: Error: Max number of files reseached");
         }else{
@@ -169,9 +174,9 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
                     strcpy(fi.filename,argp->file_name);
                     fi.fd=fd_file;
                     fi.startblock = startblock;
-			        fi.offset=0;
+		    fi.offset=0;
                     if (add_file(fi))//file add succussfully
-                        snprintf(message, 512, "In server: %s created for user %s", argp->file_name, argp->user_name);
+                        snprintf(message, 512, "In server: %s created for user %s, allocate %d blocks starting from %d", argp->file_name, argp->user_name, FILE_BLOCK, startblock);
                     else 
                         snprintf(message, 512, "In server: Error happened.");
                 }
@@ -182,6 +187,7 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
     else //file already exist
         snprintf(message, 512, "In server: File Found with file discriptor %d", fd_file);
     
+    printf("%s\n", message);
     result.fd=fd_file;
     result.out_msg.out_msg_len = strlen(message) + 1;
     free(result.out_msg.out_msg_val);
@@ -216,7 +222,7 @@ list_output *
 list_files_1_svc(list_input *argp, struct svc_req *rqstp)
 {
 	static list_output  result;
-
+	
 
 
 	return &result;

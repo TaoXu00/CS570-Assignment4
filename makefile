@@ -18,5 +18,7 @@ ssnfs.h: ssnfs.x
 
 clean :
 	rm  *.o *~
+	rm  files.dat
+	rm  disk.dat
 
  

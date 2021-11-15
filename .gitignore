@@ -1,0 +1,10 @@
+#Ignore all .o files
+*.o
+
+#Ignore all .dat files
+*.dat
+
+client
+server
+ssnfs_*
+ssnfs.h

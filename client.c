@@ -14,8 +14,6 @@
 #include "ssnfs.h"
 #include <fcntl.h>
 #include <errno.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 
 CLIENT *clnt;
 
@@ -26,20 +24,24 @@ clnt = clnt_create (host, SSNFSPROG, SSNFSVER, "tcp");
 	if (clnt == NULL) {
 		clnt_pcreateerror (host);
 		exit (1);
-	}
+	}else
+		printf("client is created successfully!\n");
 }
 int Open(char *filename_to_open){
   open_output  *result_1;
   open_input  open_file_1_arg;
-  strcpy(open_file_1_arg.user_name, getpwuid(getuid())->pw_name);
-  printf("%s\n", open_file_1_arg.user_name);
   strcpy(open_file_1_arg.file_name,filename_to_open);
+  strcpy(open_file_1_arg.user_name, getpwuid(getuid())->pw_name);
+  printf("username:%s\n", open_file_1_arg.user_name);
+  printf("file to open:%s", open_file_1_arg.file_name);
+  
   result_1 = open_file_1(&open_file_1_arg, clnt);
 	if (result_1 == (open_output *) NULL) {
 		clnt_perror (clnt, "call failed");
 	}
 	printf ("In client: Directory name is:%s \nIn client: Name of the file opened is:%s \nIn client: file descriptor returned is:%d\n", open_file_1_arg.user_name, result_1->out_msg.out_msg_val,  result_1->fd);
 	return  result_1->fd;
+	return 0;
 }
 void Write(int fd, char * buffer, int num_bytes_to_write){
 write_output  *result_3;
@@ -92,7 +94,21 @@ int get_fd(char* file_name){
 	return fd;
 }
 
+void prompt(){
+		printf("%s\n","*********************************************************************************");
+		printf("%s\n","*                          Welcome to SSNFS!                                    *");
+		printf("%s\n","*    Please select your operation, press Enter:                                 *");
+		printf("%s\n","*    Open file,   input 'o  <filename>'                                         *");
+		printf("%s\n","*    Write file,  input 'w  <filename> <num_bytes_to_read> <content_to_write>'  *");
+		printf("%s\n","*    Read  file,  input 'r  <filename> <num_bytes_to_read>'                     *");
+		printf("%s\n","*    List files,  input 'l' 			                                *");
+		printf("%s\n","*    Delete file, input 'd  <filename>'                                         *");
+		printf("%s\n","*    close file,  input 'c  <filename>'                                         *");
+		printf("%s\n","*    Enter 'q' to exist the program                                             *");
+		printf("%s\n","*********************************************************************************");
 
+
+}
 int
 main (int argc, char *argv[])
 {
@@ -102,27 +118,26 @@ main (int argc, char *argv[])
 		exit (1);
 	}
 	host = argv[1];
-	//ssnfsprog_1 (host);  //create a RCP client
+	ssnfsprog_1 (host);  //create a RCP client
 	// Main Interactive Loop
+	prompt();
 	while(TRUE){
-		char *linebuffer, *filename, *command, *tofilename;  // Strings for the line buffer, command, filename...
+		char *filename, *command, *tofilename;  // Strings for the line buffer, command, filename...
+		char *linebuffer =NULL;		
 		int valid_command, fd, num_bytes_to_read, num_bytes_to_write ; // Flag to determine if the user entered a valid command, file discriptor, and number of bytes to read and write....
     	void *outp; // All the output structs have the same structure, just use a single pointer.
     	char *offset, *numbytes, *buffer; // Parameters to read and write.
-		printf("%s\n","*********************************************************************************");
-		printf("%s\n","*                          Welcome to SSNFS!                                    *");
-		printf("%s\n","*   Please select your operation, press Enter:                                  *");
-		printf("%s\n","*   Open file,   input 'o  <filename>'                                          *");
-		printf("%s\n","*   Write file,  input 'w	<filename> <num_bytes_to_read> <content_to_write>' *");
-		printf("%s\n","*   Read  file,  input 'r  <filename> <num_bytes_to_read>'                      *");
-		printf("%s\n","*   List files,  input 'l' 			                                           *");
-		printf("%s\n","*   Delete file, input 'd  <filename>'                                          *");
-		printf("%s\n","*   close file,  input 'c  <filename>'                                          *");
-		printf("%s\n", "   Enter 'q' to exist the program                                              *");
-		printf("%s\n","*********************************************************************************");
-        printf(">");
-		gets( linebuffer );
+		
+                printf(">");
+		size_t len=0;
+		ssize_t read=0;
+		read=getline(&linebuffer, &len, stdin);
+		if(read==-1)
+			printf("input error");
+		/*else    // for debug
+			printf("%s", linebuffer);*/   
 		command = strtok(linebuffer, " "); // Split off the first word, the command
+		//printf("comamnd:%s\n",command);     //debug
 		switch(command[0]){
 			case('o'):
 				printf("%s\n", "received open command");
@@ -187,10 +202,15 @@ main (int argc, char *argv[])
 				else // If the user does not enter a filename
 					printf("Filename required. \n");
 				break;
+			case('p'):
+				prompt();
+				break;
 			case('q'):
 				exit(0);
 			default:
-			 	printf("%s\n", "Invalid operation");
+			 	printf("%s\n", "Invalid operation, press 'p' to see the manual:");
+				
+				
 		}
 		free(linebuffer);
 	}
