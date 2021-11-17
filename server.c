@@ -13,56 +13,56 @@
 #include <errno.h> // Need for errno, strerror, etc
 
 
-#define MAX_FILES 20 // The maximum number of files in the filesystem.
-#define MAX_PAGES 8 // The maximum number of pages per file.
+#define MAX_FILE_OPEN 20 // The maximum number of files in the filesystem.
 #define BLOCK_SIZE 512 // Blocks are 512 bytes.
-#define PAGE_SIZE (BLOCK_SIZE*8) // Pages are 8 blocks.
 #define FILE_BLOCK 64
-#define TEN_M 1024*1024*16 
+#define Sixteen_M 1024*1024*16 
+#define MAX_FILE Sixteen_M/(BLOCK_SIZE*FILE_BLOCK)
+struct f_node {
+int  fd;
+int  offset;
+};
+typedef struct f_node  f_node;
 
 struct file_info { // Holds the file information.
     char username[10]; // Username of the file's owner.
-    char filename[10]; // Name of the file.
-    int fd; // file descriptor.  
-	int startblock;
-    int r_offset;
-    int w_offset;
+    char filename[10]; // Name of the file. 
+    int  f_index;
+    int blocks[FILE_BLOCK];
+    int used[FILE_BLOCK];
+    int currentsize;
+    f_node file_open_table[MAX_FILE_OPEN];
 }; // End of struct file_info.
 
-struct f_node{
-char username[10];
-char filename[10];
-int  startblock;
-int  offset;
-};
 typedef struct file_info file_info;    //Define as a type 
-typedef struct f_node  f_node;
+
 
 
 int init_disk() {
-    if ((access("files.dat", F_OK) == 0) && (access("pages.dat", F_OK) == 0) && (access("disk.dat", F_OK) == 0)) {
+    
+    if ((access("files.dat", F_OK) == 0) && (access("disk.dat", F_OK) == 0)) {
     } else { //ftruncate is to creat a file with specific size
-        ftruncate(creat("disk.dat", 0666), 1024*1024*16); //store the files 
-        ftruncate(creat("pages.dat", 0666), 2560);
-        ftruncate(creat("files.dat", 0666), sizeof(file_info) * MAX_FILES); //keep the information of file_info
+        ftruncate(creat("disk.dat", 0666), Sixteen_M); //store the actual files 
+        ftruncate(creat("files.dat", 0666), sizeof(file_info)*MAX_FILE); //keep the information of file_info
     }
 }
 
-// Checks if a file exists.  Return -1 on false, file disciptor on true.
+// Checks if a file exists.  Return -1 on false, file index otherwise.
 int file_exists(char *username, char *filename) {
-    int fd, exists;
-    int fd_file=-1;  //file does not exit
+    int exists;
+    int fd, f_index=-1;  //file does not exit
     file_info fi;
     fd = open("files.dat", O_RDONLY);
-    for (exists = 0; read(fd, &fi, sizeof(fi)) > 0;) {
+    int r;
+    for (exists = 0; r=read(fd, &fi, sizeof(fi)) > 0;) {
         if ((strcmp(username, fi.username) == 0) && (strcmp(filename, fi.filename) == 0)) {
             exists = 1;
-            fd_file=fi.fd;
+            f_index=fi.f_index;
             break;
         }
     }
     close(fd);
-    return fd_file;
+    return f_index;
 }
 
 // Get information on a file.  Takes the username, filename, and a pointer to a file_info struct.
@@ -99,30 +99,28 @@ void get_file_info(char *username, char *filename, file_info *fi) {
 }*/
 
 // Inserts a new file_info struct into the file table, return the file discriptor
-int add_file(file_info fi) {
+void add_file(file_info fi) {
     int fd;
     int found;
     file_info block;
     // search for an empty block
     fd = open("files.dat", O_RDWR);
-    for (found = 0; read(fd, &block, sizeof(block)) > 0;) {
+    int r;
+    for (found = 0; r=read(fd, &block, sizeof(block)) > 0;) {
+	//printf("read %d bytes: %s\n",r,block.username);
         if (block.username[0] == 0) {
             found=1;
             break;
-        }    
+        }else
+	printf("in add_file %s\n", block.username); 
     }
     // insert file
-    if (found) {
-        lseek(fd, -sizeof(fi), SEEK_CUR);
-        printf("write %zd\n", write(fd, &fi, sizeof(fi)));
-    }else
-    found=-1;
+    lseek(fd, -sizeof(fi), SEEK_CUR);
+    printf("write %zd\n", write(fd, &fi, sizeof(file_info)));
     close(fd);
-    // return success
-    return found;
 }
 
-int assign_fd(){
+/*int assign_fd(char* username, char* filename){
     int found, fd, last_fd=-1;
     file_info block;
     // search for an empty block
@@ -142,50 +140,138 @@ int assign_fd(){
     close(fd);
     // return success
     return last_fd; 
-}
-int allocate_block(int fd_file){
+}*/
+int* allocate_block(int f_index){
     //return the start block number, -1 for exceed the maximum space
-    int startblock=fd_file*FILE_BLOCK;
-    if((startblock+FILE_BLOCK)*BLOCK_SIZE>TEN_M)
-    startblock=-1;
-    return startblock; 
+    int startblock=f_index*FILE_BLOCK;
+    int *blocks=(int *)malloc((FILE_BLOCK)*sizeof(int));
+    int i;
+    for(i=0; i<FILE_BLOCK; i++)
+	blocks[i]=startblock+i;
+    return blocks;
 }
+int* initialize_block_status(){
+ 	int *used=(int *)malloc((FILE_BLOCK)*sizeof(int));
+	int i;
+    	for(i=0; i<FILE_BLOCK; i++)
+	used[i]=0;
+      return used;
+}
+void update(file_info fi){
+   int fd;
+    int found;
+    file_info block;
+    // search for an empty block
+    fd = open("files.dat", O_RDWR);
+    int r;
+    for (found = 0; r=read(fd, &block, sizeof(block)) > 0;) {
+	//printf("read %d bytes: %s\n",r,block.username);
+        if ((strcmp(block.username, fi.username) == 0) && (strcmp(block.filename, fi.filename) == 0)) {
+            found=1;
+            break;
+        }
+    }
+    // insert file
+    lseek(fd, -sizeof(fi), SEEK_CUR);
+    printf("update %zd\n", write(fd, &fi, sizeof(file_info)));
+    close(fd);
+
+}
+
+
+int assign_fd(char* username, char* filename){
+	int fd,i, found;
+	file_info fi;
+	fd = open("files.dat", O_RDWR);
+        for (found = 0; read(fd, &fi, sizeof(fi)) > 0;) {
+        if ((strcmp(username, fi.username) == 0) && (strcmp(filename, fi.filename) == 0)) {
+            found=1;
+            break;
+        }
+    }
+	for(i=0; i<MAX_FILE_OPEN; i++){
+	  if(fi.file_open_table[i].fd==-1){
+		//printf("i=%d, fd=%d\n", i, fi.file_open_table[i].fd);
+		fi.file_open_table[i].fd=i;
+		update(fi);
+		break;
+}
+}	
+	return i;
+
+}
+int check_space(){
+   //check the disk space is enough for creating a new file or not, if yes, return a file_index, otherwise return -1
+   int fd, f_index=-1;
+    file_info block;
+    // search for an empty block
+    fd = open("files.dat", O_RDWR);
+    for (; read(fd, &block, sizeof(file_info)) > 0;) {
+        if (block.username[0] == 0) {    
+            f_index++;   //the first file has the f_index=0, 
+	    break;
+        }else{
+        f_index=block.f_index; // record the fd of the previous file
+	printf("found one block not empty, %s:%s:%d\n", block.username, block.filename, block.f_index);	//debug
+	}    
+}
+    // insert file 
+    close(fd);
+    
+    if((f_index*FILE_BLOCK+FILE_BLOCK)*BLOCK_SIZE>Sixteen_M){   // it means there is no space for a new file
+    	f_index=-1;
+	printf("not enough space\n");    
+}
+    return f_index; 
+}
+ 
+f_node* initialize_file_table(){
+	int i;
+	f_node* file_table =(f_node *)malloc((MAX_FILE_OPEN)*sizeof(f_node));
+	file_table[0].fd=0;
+	file_table[0].offset=0;
+	
+	for(i=1; i<MAX_FILE_OPEN; i++){
+		file_table[i].fd=-1;
+		file_table[i].offset=0;	
+	}
+	return file_table;
+}
+
+
 open_output *
 open_file_1_svc(open_input *argp, struct svc_req *rqstp)
 {
-	static open_output  result;
-    int fd,fd_file;
-	int startblock;
+    static open_output  result;
+    int fd,f_index, fd_file, exist;
     file_info fi;
     char message[512];
     printf("open_file_1_svc: (user_name = '%s', file_name = '%s')\n", argp->user_name, argp->file_name);
     init_disk();
-    fd_file=file_exists(argp->user_name, argp->file_name);
-    //printf("fd_file:%d\n",fd_file);    //debug
-    if (fd_file==-1) {   //if the file not exists
-        fd_file=assign_fd(); 
+    exist=file_exists(argp->user_name, argp->file_name);
+    if (exist==-1) {   //if the file not exists
+        f_index=check_space();
  	//printf("Assinged file id: %d\n", fd_file);  //debug
-        if(fd_file==MAX_FILES){  //fd_file starts from 0, if fd_file =20, it exceeds the maximum file number
-            snprintf(message, 512, "In server: Error: Max number of files reseached");
+        if(f_index==-1){  // no space for creating a new file
+            snprintf(message, 512, "In server: Error: No space for creating a new file");
         }else{
-            startblock = allocate_block(fd_file);
-                if (startblock!= -1){   //both the file number and the space are fine
-                    strcpy(fi.username,argp->user_name);
-                    strcpy(fi.filename,argp->file_name);
-                    fi.fd=fd_file;
-                    fi.startblock = startblock;
-		    fi.offset=0;
-                    if (add_file(fi))//file add succussfully
-                        snprintf(message, 512, "In server: %s created for user %s, allocate %d blocks starting from %d", argp->file_name, argp->user_name, FILE_BLOCK, startblock);
-                    else 
-                        snprintf(message, 512, "In server: Error happened.");
-                }
-                else
-                    snprintf(message, 512, "%s", "In server: No space for creating a new file");
-            }
-    }   
-    else //file already exist
-        snprintf(message, 512, "In server: File Found with file discriptor %d", fd_file);
+                strcpy(fi.username,argp->user_name);
+                strcpy(fi.filename,argp->file_name);
+                fi.f_index=f_index;	
+                memcpy(fi.blocks,allocate_block(f_index),FILE_BLOCK*sizeof(int)); 
+		memcpy(fi.used, initialize_block_status(),FILE_BLOCK*sizeof(int));
+		fi.currentsize=0;
+		initialize_file_table(); 
+		memcpy(fi.file_open_table,initialize_file_table(),sizeof(f_node)*MAX_FILE_OPEN);
+		//printf("size of fi:%d", sizeof(fi));
+                add_file(fi);//file add succussfully
+		fd_file=fi.file_open_table[0].fd;
+                snprintf(message, 512, "In server: %s created for user %s.", argp->file_name, argp->user_name);               
+             }
+	}else{ //file already exist
+        snprintf(message, 512, "In server: File Found ");
+	fd_file=assign_fd(argp->user_name, argp->file_name);
+       }
     
     printf("%s\n", message);
     result.fd=fd_file;
@@ -193,9 +279,7 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
     free(result.out_msg.out_msg_val);
     result.out_msg.out_msg_val=(char *) malloc(result.out_msg.out_msg_len);
     strcpy(result.out_msg.out_msg_val, (*argp).file_name);
-    printf("In server: filename recieved:%s\n",argp->file_name);
-	printf("In server: username received:%s\n",argp->user_name);
-	return &result;
+    return &result;
 }
 
 read_output *
@@ -211,9 +295,62 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
 write_output *
 write_file_1_svc(write_input *argp, struct svc_req *rqstp)
 {
-	static write_output  result;
 
-	
+    /*
+struct write_input
+{
+  char user_name[USER_NAME_SIZE];
+  int fd;      /* file descriptor*/
+ // int numbytes; /* number of bytes to be written from the buffer*/
+ // char buffer<>; 
+//};
+    
+    static write_output  result;
+    char message[512];
+    char *buffer;
+    file_info fi;
+    int fd, numbytes, currentsize, at, len, offset, block, i, left;
+    init_disk();
+    printf("write_file_1_svc: (user_name = '%s', file discritor = '%s' numbytes = %d)\n", 
+           argp->user_name, argp->fd, argp->numbytes);
+    printf("write buffer: %s\n", argp->buffer);
+    static write_output out;
+
+    if (file_exists(argp->user_name, argp->file_name)!=-1) { //the file exists
+        numbytes =argp->numbytes < strlen(argp->buffer) ? argp->numbytes : strlen(argp->buffer);
+        buffer = argp->buffer;
+	fi=getFileInfo(argp->user_name, argp->fd);
+         if ((fi.currentsize + numbytes) > FILE_BLOCK*BLOCK_SIZE) {
+            snprintf(message, 512, "Error: write is too large.");
+        } else {
+	   //search for current position of fd. 
+	 for(i=0; used[i]!=0;i++)   //find the first used block;
+         cabacity=BLOCK_SIZE-offset;
+         at=0;
+	 left=numbytes;
+	 fd = open("disk.dat", O_RDWR);
+         while(left>numbytes){ //it means the current block is not big enough
+	   printf("lseek to %d\n", (BLOCK_SIZE * block_num) + offset);
+	   printf("%d %d %d\n", BLOCK_SIZE, block_num, offset);
+	   write(fd, buffer+at, left);
+	   at+=left;
+	   left
+
+}
+	  fd = open("disk.dat", O_RDWR);
+          printf("lseek to %d\n", (BLOCK_SIZE * block_num) + (offset % BLOCK_SIZE));
+          printf("%d %d %d\n", BLOCK_SIZE, block_num, offset%PAGE_SIZE);
+                lseek(fd, (BLOCK_SIZE * block_num) + (offset % PAGE_SIZE), SEEK_SET);
+                write(fd, buffer, numbytes);
+                close(fd);
+               
+            }
+            snprintf(message, 512, "%d characters written to file %s", numbytes, inp->file_name);
+        }
+    } else {
+        // file doesn't exist
+        snprintf(message, 512, "Error: file %s does not exist.", inp->file_name);
+    }
 
 	return &result;
 }
