@@ -111,7 +111,7 @@ void List(){
 	if (result_4 == (list_output *) NULL) {
 		clnt_perror (clnt, "call failed");
 	}else
-	printf("%s\n", result_4->out_msg.out_msg_val);
+	printf("%s\n", result4->out_msg.out_msg_val);
 }
 void Delete(char * file_name){
 	delete_output  *result_5;
