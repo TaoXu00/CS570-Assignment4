@@ -50,7 +50,9 @@ write_input  write_file_1_arg;
        write_file_1_arg.numbytes=num_bytes_to_write;
        write_file_1_arg.buffer.buffer_val = strdup(buffer);
        write_file_1_arg.buffer.buffer_len = strlen(buffer);
+       //printf("send %s\n",buffer);
        result_3 = write_file_1(&write_file_1_arg, clnt);
+      
        if (result_3 == (write_output *) NULL) {
 		clnt_perror (clnt, "call failed");
 	}else{
@@ -62,19 +64,8 @@ write_input  write_file_1_arg;
 	}
 }
 //why read has one more parameter of buffer.
-//void Read(int fd, char * buffer, int num_bytes_to_read){
-void Read(int fd, int num_bytes_to_read){
-	/*struct read_output {
-	int success;
-	struct {
-		u_int buffer_len;
-		char *buffer_val;
-	} buffer;
-	struct {
-		u_int out_msg_len;
-		char *out_msg_val;
-	} out_msg;
-};*/
+void Read(int fd, char * buffer, int num_bytes_to_read){
+//void Read(int fd, int num_bytes_to_read){
         read_output  *result_2;
 	read_input  read_file_1_arg;
 	char* username =getpwuid(getuid())->pw_name;
@@ -82,25 +73,32 @@ void Read(int fd, int num_bytes_to_read){
         read_file_1_arg.fd=fd; //assign file name
 	read_file_1_arg.numbytes=num_bytes_to_read;
 	result_2 = read_file_1(&read_file_1_arg, clnt);
-	printf("send read request!");
+	//printf("send read request!");
 	if (result_2 == (read_output *) NULL) {
 		clnt_perror (clnt, "call failed");
 	}else{
-	if(result_2->success==-1)
-        printf("In client: read failed\n");
-	else if(result_2->success==1)
-	printf("In client: read success\n");
-	printf ("%s\n",result_2->buffer.buffer_val);
+		if(result_2->success==-1)
+        		printf("In client: read failed\n");
+		else if(result_2->success==1){
+			buffer=(char*)malloc(result_2->buffer.buffer_len);
+			strcpy(buffer, result_2->buffer.buffer_val);
+			printf("In client: read success\n");
+			printf("%s\n", result_2->buffer.buffer_val);
+		}
 	}
 	printf("%s\n", result_2->out_msg.out_msg_val);
 }
 void Close(int fd){
 	close_output  *result_6;
 	close_input  close_file_1_arg;
+	char* username =getpwuid(getuid())->pw_name;
+	strcpy(close_file_1_arg.user_name, username); // Copy user name.
+	close_file_1_arg.fd=fd;
         result_6 = close_file_1(&close_file_1_arg, clnt);
 	if (result_6 == (close_output *) NULL) {
 		clnt_perror (clnt, "call failed");
-	}
+	}else
+	printf("%s\n", result_6->out_msg.out_msg_val);
 }
 void List(){
 	list_output  *result_4;
@@ -116,10 +114,14 @@ void List(){
 void Delete(char * file_name){
 	delete_output  *result_5;
 	delete_input  delete_file_1_arg;
+	char* username =getpwuid(getuid())->pw_name;
+	strcpy(delete_file_1_arg.user_name, username); // Copy user name
+	strcpy(delete_file_1_arg.file_name, file_name); // Copy user name
 	result_5 = delete_file_1(&delete_file_1_arg, clnt);
 	if (result_5 == (delete_output *) NULL) {
 		clnt_perror (clnt, "call failed");
 	}
+	printf("%s\n", result_5->out_msg.out_msg_val);
 }	
 int get_fd(char* file_name){
 	int fd;
@@ -132,14 +134,32 @@ void prompt(){
 		printf("%s\n","*    Please select your operation, press Enter:                                 *");
 		printf("%s\n","*    Open file,   input 'o  <filename>'                                         *");
 		printf("%s\n","*    Write file,  input 'w  <file_discriptor> <num_bytes_to_write> <data>'      *");
-		printf("%s\n","*    Read  file,  input 'r  <file_discriptor> <num_bytes_to_read>'                     *");
+		printf("%s\n","*    Read  file,  input 'r  <file_discriptor> <num_bytes_to_read>'              *");
 		printf("%s\n","*    List files,  input 'l' 			                                *");
 		printf("%s\n","*    Delete file, input 'd  <filename>'                                         *");
-		printf("%s\n","*    close file,  input 'c  <filename>'                                         *");
+		printf("%s\n","*    close file,  input 'c  <file_discriptor>'                                  *");
 		printf("%s\n","*    Enter 'q' to exist the program                                             *");
 		printf("%s\n","*********************************************************************************");
 
 
+}
+void test(){
+int i,j;
+int fd1,fd2;
+char buffer[100];
+fd1=Open("File1"); // opens the file "File1"
+for (i=0; i< 20;i++){
+Write(fd1, "This is a test program for cs570 assignment 4", 15);
+}
+Close(fd1);
+fd2=Open("File1");
+for (j=0; j< 20;j++){
+Read(fd2, buffer, 10);
+printf("%s\n",buffer);
+}
+Close(fd2);
+Delete("File1");
+List();
 }
 int
 main (int argc, char *argv[])
@@ -152,13 +172,14 @@ main (int argc, char *argv[])
 	host = argv[1];
 	ssnfsprog_1 (host);  //create a RCP client
 	// Main Interactive Loop
+	//test();
 	prompt();
 	while(TRUE){
 		char *fd_file, *filename, *command, *tofilename;  // Strings for the line buffer, command, filename...
-		char *linebuffer =NULL;		
-		int valid_command, fd, num_bytes_to_read, num_bytes_to_write ; // Flag to determine if the user entered a valid command, file discriptor, and number of bytes to read and write....
+		char *linebuffer;		
+		int valid_command, fd, num_bytes_to_read, num_bytes_to_write, at ; // Flag to determine if the user entered a valid command, file discriptor, and number of bytes to read and write....
     	void *outp; // All the output structs have the same structure, just use a single pointer.
-    	char *offset, *numbytes, *buffer; // Parameters to read and write.
+    	char *offset, *numbytes, *buffer, *buffer_backup; // Parameters to read and write.
 		
                 printf(">");
 		size_t len=0;
@@ -166,33 +187,35 @@ main (int argc, char *argv[])
 		read=getline(&linebuffer, &len, stdin);
 		if(read==-1)
 			printf("input error");
-		/*else    // for debug
-			printf("%s", linebuffer);*/ 
 		linebuffer[strlen(linebuffer)-1]='\0';  
+		buffer_backup=(char*)malloc(strlen(linebuffer));
+		strcpy(buffer_backup,linebuffer);
+		//printf("buffer_backup %s\n", buffer_backup);
 		command = strtok(linebuffer, " "); // Split off the first word, the command
-		//printf("comamnd:%s\n",command);     //debug
 		switch(command[0]){
 			case('o'):
 				filename=strtok(NULL, " ");
-				//printf("filename %s\n", filename);
 				if(filename){
-					//filename[strlen(filename)-1]='\0';
+					
 					Open(filename);
 				}
 				else // If the user does not enter a filename
 					printf("Filename required. \n");
 				break;
 			case('w'):
+				at=strlen(command)+1;
 				fd_file = strtok(NULL, " "); // Split off the discriptor of the file to which we will write.
-                if (fd_file) { // If the user does enter a filename...
-                        numbytes = strtok(NULL, " "); // Split off the length of the write.
-                        if (numbytes) { // If the user does enter an offset...
-                            buffer = strtok(NULL, " "); // Split off content of the write.
-                            if (buffer) {
+                		if (fd_file) { // If the user does enter a filename...
+                        	numbytes = strtok(NULL, " "); // Split off the length of the write.
+				at+=strlen(fd_file)+1;
+                        	if (numbytes) { // If the user does enter numbytes...
+			   	 at+=strlen(numbytes)+1;
+			    
+                           	 buffer = strtok(NULL, " "); // Split off content of the write.
+                            	if (buffer) {
 				fd=atoi(fd_file);
                                 num_bytes_to_write=atoi(numbytes); // The number of bytes to write.
-                                //buffer[strlen(buffer)-1]='\0';
-				Write(fd, buffer, num_bytes_to_write);
+				Write(fd, buffer_backup+at, num_bytes_to_write);
                                 valid_command = 1; // User entered a valid command.
                             } else {
                                 printf("Data to write required.\n"); // Report an error message.
@@ -211,7 +234,7 @@ main (int argc, char *argv[])
                            fd=atoi(fd_file);
 			  // numbytes[strlen(numbyte)]='\0'
 			   num_bytes_to_read = atoi(numbytes); // The number of bytes to read.
-                           Read(fd, num_bytes_to_read);
+                           Read(fd, buffer,num_bytes_to_read);
                            // valid_command = 1; // User entered a valid command.
                         } else {
                             printf("Number of bytes required.\n"); // Report an error message.
@@ -232,10 +255,9 @@ main (int argc, char *argv[])
 					printf("Filename required. \n");
 				break;
 			case('c'): //if the user enters close command
-				filename=strtok(NULL, " ");
-				if(filename){
-					fd=get_fd(filename);
-					Close(fd);
+				fd_file=strtok(NULL, " ");
+				if(fd_file){
+					Close(atoi(fd_file));
 				}	
 				else // If the user does not enter a filename
 					printf("Filename required. \n");
@@ -251,6 +273,7 @@ main (int argc, char *argv[])
 				
 		}
 		free(linebuffer);
+		free(buffer_backup);
 	}
 	/*int fd=Open("myfile");
 	printf("File descriptor returnd inside main() is:%d\n",  fd);*/

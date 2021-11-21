@@ -4,6 +4,7 @@
  * as a guideline for developing your own functions.
  */
 //token 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
+//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
 #include <stdio.h> // For printf, etc.
 #include <rpc/rpc.h> // For RPC facilities.
 #include <string.h> // For strcpy, strcmp, strdup, strlen, etc.
@@ -76,44 +77,41 @@ int file_exists(char *username, char *filename) {
     return exists;
 }
 
-file_info* find_file_info(char* username, int fd_file){
-    int exists;
-    int fd, f_record_index=-1, i;  //file does not exit
-    return NULL;
 
-
-}
 f_node* find_fd_record(char* username, int fd_file){
-	int i;
+	int i, found=0;
 	f_node* f;
 	for(i=0; i<MAX_FILE_OPEN; i++){
 	if(strcmp(file_table_open[i].username, username)==0 && file_table_open[i].fd==fd_file){
-	   printf("found file record: username %s filename %s fd %d pointer %d \n", file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
 	   f=(f_node*)malloc(sizeof(f_node));
            memcpy(f,&file_table_open[i], sizeof(f_node));
-	   printf("copied to return f_node: username %s filename %s fd %d pointer %d \n", f->username, f->filename, f->fd, f->pointer);
-           return f;
+	   found=1;
+	   break;	
 	}
 }
-	printf("does not find fd_record!!!!\n");
-	return NULL;
-
+	if(found==1)
+	    return f;
+	else
+	  return (void *)0;
+	
 }
 // Get information on a file.  Takes the username, filename, and a pointer to a file_info struct.
-// Not correct, to be modified
 file_info* get_file_info(char *username, char *filename) {
-    int fd, exists;
+    int fd, exists, found=0;
     file_info* file;
     fd = open("files.dat", O_RDONLY);
     for (exists = 0; read(fd, file, sizeof(file_info)) > 0;) {
         if ((strcmp(username, file->username) == 0) && (strcmp(filename, file->filename) == 0)) {
-          printf("compare parameter username %s with f_username %s, filename %s f_filename %s\n", username, file->username, filename, file->filename);
+         // printf("compare parameter username %s with f_username %s, filename %s f_filename %s\n", username, file->username, filename, file->filename);
 	  close(fd);
-	  return file;
-
+          found=1;
+	  break;
         }
     }
-    return NULL;
+	if(found==1)
+	    return file;
+	else
+	  return (void *)0;
 }
 
 // Inserts a new file_info struct into the file table, return the file discriptor
@@ -161,22 +159,22 @@ void update_file(file_info* fi){
     fd=open("files.dat", O_RDWR);
      int i;
      file_info file;
-printf("After updating, the file info list are: \n");
+	/*printf("After updating, the file info list are: \n");
      while(read(fd, &file, sizeof(file_info)) > 0) {
 	//printf("read %d bytes: %s\n",r,block.username);
 	if(file.username[0]!=0)
         printf("username %s filename %s startblcok %d currentsize %d\n", file.username, file.filename, file.startblock, file.currentsize);
-    }
+    }*/
 
 }
 
 void update_fnode(f_node* f){
 	int i;
-        printf("Update_fnode: receive file username %s, fd %d file spointer %d\n", f->username, f->fd, f->pointer);
+        //printf("Update_fnode: receive file username %s, fd %d file spointer %d\n", f->username, f->fd, f->pointer);
 	for(i=0; i<MAX_FILE_OPEN; i++){
 	if(strcmp(file_table_open[i].username, f->username)==0 && file_table_open[i].fd==f->fd){
 	   file_table_open[i].pointer=f->pointer;
-	  printf("updated fnode: file record index %d with username '%s' fiename '%s' fd %d pointer %d\n", i, file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
+	  //printf("updated fnode: file record index %d with username '%s' fiename '%s' fd %d pointer %d\n", i, file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
 	   break;
          }
 }
@@ -210,12 +208,12 @@ void add_file_record(char* username, char* filename, int fd_file, int pointer){
      int i;
      for(i=0;i<MAX_FILE_OPEN;i++){
      if(file_table_open[i].username[0]==0){
-	    printf("find an empty entry with index = %d\n", i);
+	   // printf("find an empty entry with index = %d\n", i);
             strcpy(file_table_open[i].username, username);
 	    strcpy(file_table_open[i].filename, filename);
 	    file_table_open[i].fd=fd_file;
 	    file_table_open[i].pointer=pointer;
-	    printf("add a new file record index %d with username '%s' fiename '%s' fd %d pointer %d:", i, file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
+	    //printf("add a new file record index %d with username '%s' fiename '%s' fd %d pointer %d:", i, file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
 	    break;
     }
    }
@@ -235,6 +233,68 @@ void file_list(char *username, char *buffer) {
     close(fd);
 }
 
+void file_discriptor_delete(int index){
+	memset(file_table_open[index].username, 0, sizeof(file_table_open[index].username));
+	memset(file_table_open[index].filename, 0, sizeof(file_table_open[index].filename));
+	file_table_open[index].fd=-1;
+	file_table_open[index].pointer=0;
+}
+
+
+int file_delete(char *username, char *filename) {
+    int fd, file_index;
+    int file_open_record_index_list[20];
+    int found, i;
+    int j=0;
+    file_info fi;
+    // search for file's file info block
+    fd = open("files.dat", O_RDWR);
+    for (found = 0; read(fd, &fi, sizeof(fi)) > 0;) {
+        if ((strcmp(username, fi.username) == 0) && (strcmp(filename, fi.filename) == 0)) {
+            found = 1;
+            break;
+        }
+    }
+    // delete file
+    if (found) {
+	    file_index=fi.startblock/BLOCK_SIZE;
+	    file_blocks_index[file_index]=0;
+            lseek(fd, -sizeof(fi), SEEK_CUR);
+            memset(&fi, 0, sizeof(fi));
+            printf("write %zd\n", write(fd, &fi, sizeof(fi)));
+	    close(fd);
+	     for(i=0; i<MAX_FILE_OPEN; i++){
+		if(strcmp(file_table_open[i].username, username)==0 && strcmp(file_table_open[i].filename, filename)==0){
+	       file_open_record_index_list[j]=file_table_open[i].fd;
+	       j++;
+		//printf("found file record: %d \n",file_table_open[i].fd);
+    	   	}
+	     }
+	    for(i=0;i<j;i++){
+		//printf("delete file record: %d \n", file_open_record_index_list[i]);
+		file_discriptor_delete(file_open_record_index_list[i]);
+		
+	}
+    }
+    
+    // return success
+    return found;
+}
+
+
+int file_discriptor_exists(char* username, int file_fd){
+    int found, index, i;
+    index=-1;
+    for(i=0; i<MAX_FILE_OPEN; i++){
+	if(strcmp(file_table_open[i].username, username)==0 && file_table_open[i].fd==file_fd){
+	  // printf("found file record: username %s filename %s fd %d pointer %d \n", file_table_open[i].username, file_table_open[i].filename, file_table_open[i].fd, file_table_open[i].pointer);
+	index=i;
+	break;
+    }
+}
+	return index;
+}
+
 
 open_output *
 open_file_1_svc(open_input *argp, struct svc_req *rqstp)
@@ -248,7 +308,7 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
     exist=file_exists(argp->user_name, argp->file_name);
     if (exist==0) {   //if the file not exists
         f_index=check_space();  //find one empty entry in the file_blocks_index table
- 	printf("found file index entry: %d\n", f_index);  //debug
+ 	//printf("found file index entry: %d\n", f_index);  //debug
        if(f_index==-1){  // no space for creating a new file
             snprintf(message, 512, "In server: Error: No space for creating a new file\n");
         }else{
@@ -258,7 +318,7 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
                 fi.startblock=f_index*FILE_BLOCK;
 		fi.currentsize=0;	
                 add_file(fi);//file add succussfully
-		printf("added a new file with username %s, filename %s, startblock %d, currentsize %d\n", fi.username, fi.filename, fi.startblock, fi.currentsize);
+		//printf("added a new file with username %s, filename %s, startblock %d, currentsize %d\n", fi.username, fi.filename, fi.startblock, fi.currentsize);
 		//fd_file=fi.file_open_table[0].fd;
 		fd_file=fd_file_counter++;
 		add_file_record(argp->user_name, argp->file_name, fd_file, 0);
@@ -269,7 +329,6 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
         // assign a new discriptor to the file
 	fd_file=fd_file_counter++;
 	add_file_record(argp->user_name, argp->file_name, fd_file, 0);
-	//fd_file=assign_fd(argp->user_name, argp->file_name);
 	snprintf(message, 512, "In server: %s found, assigned a new discriptor\n", argp->file_name);     
        } 
     
@@ -279,7 +338,6 @@ open_file_1_svc(open_input *argp, struct svc_req *rqstp)
     result.out_msg.out_msg_len = strlen(message) + 1;
     free(result.out_msg.out_msg_val);
     result.out_msg.out_msg_val=(char *) malloc(result.out_msg.out_msg_len);
-    strcpy(result.out_msg.out_msg_val, argp->user_name);
     return &result;
 }
 
@@ -296,11 +354,14 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
         printf("read_file_1_svc: (user_name = '%s', file_discriptor = %d, numbytes = %d\n)", argp->user_name, argp->fd, argp->numbytes);
 	numbytes=argp->numbytes;
 	f_node= find_fd_record(argp->user_name, argp->fd);
-	pointer=f_node->pointer;
-    	printf("f_node: %s\n", f_node->filename);
-	strcpy(username,f_node->username);
-	strcpy(filename,f_node->filename);
-       if (f_node!=NULL) { //the file discriptor exists
+       if (!f_node){ //the file discriptor does not exist
+	result.success=-1;
+	snprintf(message, 512, "Error: file discriptor %d does not exist.", argp->fd);
+       }else{ //the file discriptor exists
+		pointer=f_node->pointer;
+    		//printf("f_node: %s\n", f_node->filename);
+		strcpy(username,f_node->username);
+		strcpy(filename,f_node->filename);
        	 	file= get_file_info(username,filename);
 //printf("debug1-----userame %s, filename %s, startblock %d, currentsize %d \n",file->username, file->filename, file->startblock, file->currentsize);
 		currentsize=file->currentsize;
@@ -317,7 +378,7 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
 	 left=numbytes;
 	 startblock=file->startblock;
 	 start=startblock*BLOCK_SIZE+pointer;
-	printf("1--Going to read %d bytes starting from blcok %d and bytes %d\n", numbytes,startblock,start);
+	//printf("1--Going to read %d bytes starting from blcok %d and bytes %d\n", numbytes,startblock,start);
 	fd = open("disk.dat", O_RDWR);
 	 lseek(fd, start, SEEK_SET);
 	while(left!=0){  //every time it reads maximum one block size and store in the buffer
@@ -326,7 +387,7 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
 	 	else
 	    	   len=left;
                read(fd, buffer+at, len);
-	       printf("read %d bytes\n to buffer %s\n", len, buffer);
+	      // printf("read %d bytes\n to buffer %s\n", len, buffer);
 	       at+=len;
 	       left-=len;
         }
@@ -335,7 +396,7 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
 	pointer+=numbytes;
 	f_node->pointer=pointer;
 	f_node->fd=argp->fd;
-	printf("before update f_node: username %s, filename %s, fd %d, pointer %d\n", f_node->username,f_node->filename, f_node->fd, f_node->pointer);
+	//printf("before update f_node: username %s, filename %s, fd %d, pointer %d\n", f_node->username,f_node->filename, f_node->fd, f_node->pointer);
 	update_fnode(f_node); 
 	result.success=1;	
         snprintf(message, 512, "read %d bytes from file fd= %d", argp->numbytes, argp->fd);
@@ -347,10 +408,7 @@ read_file_1_svc(read_input *argp, struct svc_req *rqstp)
 	strcpy(result.buffer.buffer_val, buffer); 
 	//printf("debug3-------\n");
      }
-      }else{ //the file discriptor does not exist
-	result.success=-1;
-	snprintf(message, 512, "Error: file %d does not exist.", argp->fd);
-       } 
+      }
     result.out_msg.out_msg_len = strlen(message) + 1;
     free(result.out_msg.out_msg_val);
     result.out_msg.out_msg_val=(char *) malloc(result.out_msg.out_msg_len);
@@ -370,16 +428,22 @@ write_file_1_svc(write_input *argp, struct svc_req *rqstp)
     int fd, currentsize,len, at, pointer, block, i, left, block_num, capacity, numbytes, start, startblock;
     printf("write_file_1_svc: (user_name = '%s', file discritor = '%d' numbytes = %d)\n", 
            argp->user_name, argp->fd, argp->numbytes);
-    printf("write buffer: %s\n", argp->buffer.buffer_val);
+    //printf("write buffer: %s\n", argp->buffer.buffer_val);
     f_node=find_fd_record(argp->user_name, argp->fd);
-    printf("f_node: %s\n", f_node->filename);
-   if (f_node!=NULL) { //the file discriptor exists
-	printf("debug-----: f_node->filename %s\n", f_node->filename);
+   if (!f_node){
+	//the file discriptor does not exist
+	result.success=-1;
+	snprintf(message, 512, "Error: file discriptor %d does not exist.", argp->fd);
+   }else{ //the file discriptor exists
+	
 	strcpy(username,f_node->username);
 	strcpy(filename,f_node->filename);
+	//printf("---debug write------");
         file= get_file_info(username, filename);
-	printf("Write function: got the file info username %s  filename %s startblock %d, currentsize %d\n", file->username, file->filename, file->startblock, file->currentsize);
-        numbytes =argp->numbytes < strlen(argp->buffer.buffer_val) ? argp->numbytes : strlen(argp->buffer.buffer_val); //take the actually number of bytes to write
+	//printf("debug-----: f_node->filename %s\n", f_node->filename);
+	//printf("Write function: got the file info username %s  filename %s startblock %d, currentsize %d\n", file->username, file->filename, file->startblock, file->currentsize);
+	numbytes =argp->numbytes < strlen(argp->buffer.buffer_val) ? argp->numbytes : strlen(argp->buffer.buffer_val); //take the actually number of bytes to write
+        //printf("argp->numbytes going to write %d bytes.\n", numbytes);	
 	currentsize=file->currentsize;
 	pointer=f_node->pointer;
 	startblock=file->startblock;
@@ -391,9 +455,8 @@ write_file_1_svc(write_input *argp, struct svc_req *rqstp)
 	   //search for current position of fd. 
 	 at=0;
 	 left=numbytes;
-	 printf("Write_func: got startblock %d and fd pointer %d\n", file->startblock, f_node->pointer);
 	 start=startblock*BLOCK_SIZE+pointer;
-	 printf("Write_func: filecurrent size %d, going to write at %d with startblock = %d\n", file->currentsize,start, file->startblock);
+	 //printf("Write_func: filecurrent size %d, going to write at %d with startblock = %d\n", file->currentsize,start, file->startblock);
 	//printf("numbytes0: %d, filecurrent size: %d\n", numbytes, file->currentsize);
 	 fd = open("disk.dat", O_RDWR);
 	 lseek(fd, start, SEEK_SET);
@@ -414,15 +477,12 @@ write_file_1_svc(write_input *argp, struct svc_req *rqstp)
 	close(fd);
 	currentsize+=numbytes;
 	file->currentsize=currentsize;
-	printf("Write_func:2---after write %d bytes,filecurrent size become %d\n", numbytes, file->currentsize);
+	//printf("Write_func:2---after write %d bytes,filecurrent size become %d\n", numbytes, file->currentsize);
         update_file(file);
 	result.success=1;
-        snprintf(message, 512, "%d characters written to file %d", numbytes, argp->fd);
+        snprintf(message, 512, "%d bytes written to file %d", numbytes, argp->fd);
        }
-       }else{ //the file discriptor does not exist
-	result.success=-1;
-	snprintf(message, 512, "Error: file %d does not exist.", argp->fd);
-       } 
+       }
     result.out_msg.out_msg_len = strlen(message) + 1;
     free(result.out_msg.out_msg_val);
     result.out_msg.out_msg_val=(char *) malloc(result.out_msg.out_msg_len);
@@ -440,31 +500,54 @@ list_files_1_svc(list_input *argp, struct svc_req *rqstp)
     init_disk();
     printf("list_file_1_svc: (usrname = '%s')\n", argp->user_name);
     file_list(argp->user_name, buffer);
-    printf("files: %s\n", buffer);
+    //printf("files: %s\n", buffer);
     static list_output out;
     snprintf(message, 512, "The files are:%s", buffer);
     out.out_msg.out_msg_len = strlen(message) + 1;
     out.out_msg.out_msg_val = strdup(message);
     return &out;
 }
+
 delete_output *
 delete_file_1_svc(delete_input *argp, struct svc_req *rqstp)
 {
-	static delete_output  result;
-
-
-
-	return &result;
+     static delete_output  result;
+     char message[512];
+     printf("delete_file_1_svc: (user_name = '%s', file_name = '%s')\n", argp->user_name, argp->file_name);
+    static delete_output out;
+    if (file_exists(argp->user_name, argp->file_name)) {
+        file_delete(argp->user_name, argp->file_name);
+        snprintf(message, 512, "%s deleted", argp->file_name);
+    } else {
+        // file doesn't exist
+        snprintf(message, 512, "Error: file %s does not exist.", argp->file_name);
+    }
+    result.out_msg.out_msg_len = strlen(message) + 1;
+    result.out_msg.out_msg_val = strdup(message);
+     return &result;
 }
 
 close_output *
 close_file_1_svc(close_input *argp, struct svc_req *rqstp)
 {
 	static close_output  result;
+	char message[512];
+     	printf("close_file_1_svc: (user_name = '%s', file_fd = '%d')\n", argp->user_name, argp->fd);
+    	static delete_output out;
+        int index;
+	index=file_discriptor_exists(argp->user_name, argp->fd);
+	//printf("found index %d\n", index);
+   	if (index!=-1) {
+        file_discriptor_delete(index);
+        snprintf(message, 512, "file discriptor %d is closed", argp->fd);
+    } else {
+        // file doesn't exist
+        snprintf(message, 512, "Error: file fd %d does not exist.", argp->fd);
+    }
+    result.out_msg.out_msg_len = strlen(message) + 1;
+    result.out_msg.out_msg_val = strdup(message);
+     return &result;
 
-
-
-	return &result;
 }
 
 
